@@ -13,6 +13,8 @@ defmodule Clipboard.Application do
       ClipboardWeb.Telemetry,
       # Start the PubSub system
       {Phoenix.PubSub, name: Clipboard.PubSub},
+      # Start our Presence module
+      ClipboardWeb.Presence,
       # Start the Endpoint (http/https)
       ClipboardWeb.Endpoint
       # Start a worker by calling: Clipboard.Worker.start_link(arg)
