@@ -23,6 +23,39 @@ defmodule ClipboardWeb.Room.ShowLive do
       <li><%= uuid %></li>
     <% end %>
     </ul>
+
+    <h3>Paste data</h3>
+    <%= form_for :input, "#", [phx_change: "validate", phx_submit: "save"],fn f -> %>
+    <%= text_input f, :title, placeholder: "Title" %>
+    <%= error_tag f, :title %>
+    <%= submit "Save" %>
+    <% end %>
+
+    <button id="read-html">Paste HTML below</button>
+    <div id="html-output"></div>
+    <script>
+    document.getElementById("read-html").addEventListener("click", onPaste);
+    document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
+
+    async function onPaste(pasteEvent) {
+      /* if (pasteEvent) {
+        let paste = (pasteEvent.clipboardData || window.clipboardData).getData('text');
+        console.log("Got something from a paste event: " + paste)
+       } else { */
+        let items = await navigator.clipboard.read();
+        for (let item of items) {
+          if (!item.types.includes("text/html"))
+              continue;
+          let reader = new FileReader;
+          reader.addEventListener("load", loadEvent => {
+              document.getElementById("html-output").innerHTML = reader.result;
+          });
+          reader.readAsText(await item.getType("text/html"));
+          break;
+        }
+    }
+
+    </script>
     """
   end
 
@@ -51,6 +84,16 @@ defmodule ClipboardWeb.Room.ShowLive do
          |> assign(:slug, slug)
          |> assign(:connected_users, [])}
     end
+  end
+
+  def handle_event("validate", params, socket) do
+    params |> IO.inspect(label: "validate_params")
+    {:noreply, socket}
+  end
+
+  def handle_event("save", params, socket) do
+    params |> IO.inspect(label: "save_params")
+    {:noreply, socket}
   end
 
   @impl true

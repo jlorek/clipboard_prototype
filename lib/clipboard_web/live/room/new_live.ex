@@ -57,6 +57,7 @@ defmodule ClipboardWeb.Room.NewLive do
   end
 
   defp put_changeset(socket, params \\ %{}) do
+    IO.inspect(params)
     socket
     |> assign(:changeset, Room.changeset(%Room{}, params))
   end
