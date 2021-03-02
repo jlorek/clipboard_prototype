@@ -23,6 +23,10 @@ defmodule ClipboardWeb.Router do
       live "/new", Room.NewLive, :new
       live "/:slug", Room.ShowLive, :show
     end
+
+    scope "/playground" do
+      live "/thermostat", Playground.ThermostatLive
+    end
   end
 
   # Other scopes may use custom stacks.

@@ -16,6 +16,7 @@ defmodule ClipboardWeb.Room.ShowLive do
   @impl true
   def render(assigns) do
     ~L"""
+    <div id="<%= UUID.uuid4() %>" phx-hook="messenger" />
     <h1><%= @room.title %></h1>
     <h3>Connected users:</h3>
     <ul>
@@ -38,21 +39,29 @@ defmodule ClipboardWeb.Room.ShowLive do
     document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
 
     async function onPaste(pasteEvent) {
-      /* if (pasteEvent) {
-        let paste = (pasteEvent.clipboardData || window.clipboardData).getData('text');
-        console.log("Got something from a paste event: " + paste)
-       } else { */
-        let items = await navigator.clipboard.read();
-        for (let item of items) {
-          if (!item.types.includes("text/html"))
-              continue;
-          let reader = new FileReader;
+      // simple paste data extraction
+      // let paste = (pasteEvent.clipboardData || window.clipboardData).getData('text');
+      // console.log("Got something from a paste event: " + paste)
+
+      const acceptedTypes = ["text/html", "text/plain"]
+      const items = await navigator.clipboard.read();
+      for (let item of items) {
+        for (let acceptedType of acceptedTypes) {
+          if (!item.types.includes(acceptedType)) {
+            continue
+          }
+          const reader = new FileReader;
           reader.addEventListener("load", loadEvent => {
-              document.getElementById("html-output").innerHTML = reader.result;
+            const content = reader.result;
+            document.getElementById("html-output").innerHTML = reader.result;
+            window.socketMessenger.sendClipboardData(content)
           });
-          reader.readAsText(await item.getType("text/html"));
-          break;
+          const typeData = await item.getType(acceptedType)
+          reader.readAsText(typeData)
+          return
         }
+      }
+      console.log("Got paste data, but could not extract text.", items)
     }
 
     </script>
@@ -86,6 +95,7 @@ defmodule ClipboardWeb.Room.ShowLive do
     end
   end
 
+  @impl true
   def handle_event("validate", params, socket) do
     params |> IO.inspect(label: "validate_params")
     {:noreply, socket}
@@ -101,6 +111,12 @@ defmodule ClipboardWeb.Room.ShowLive do
     {:noreply,
      socket
      |> assign(:connected_users, list_present(socket))}
+  end
+
+  @impl true
+  def handle_event("paste", _params = %{"pasteData" => data}, socket) do
+    data |> IO.inspect(label: "Received Data")
+    {:noreply, socket}
   end
 
   defp list_present(socket) do

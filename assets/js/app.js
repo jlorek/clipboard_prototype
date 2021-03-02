@@ -17,8 +17,48 @@ import {Socket} from "phoenix"
 import NProgress from "nprogress"
 import {LiveSocket} from "phoenix_live_view"
 
+let hooks = {}
+hooks.messenger = {
+    mounted() {
+        console.log("messenger is mounted")
+        window.socketMessenger = {
+            sendClipboardData: (data) => {
+                this.pushEvent("paste", {pasteData: data}, (reply, ref) => { })
+            }
+        }
+    }
+}
+
+hooks.whatever = {
+    mounted() {
+        console.log("whatever was mounted!")
+        this.el.addEventListener("paste", pasteEvent => {
+            // async events seem unsupported...
+            //debugger;
+            let data = (pasteEvent.clipboardData || window.clipboardData).getData('text');
+            console.log("Got something from a paste event: " + data)
+
+            this.pushEvent("paste", {pasteData: data}, (reply, ref) => { })
+
+            // let items = await navigator.clipboard.read();
+            // for (let item of items) {
+            //   if (!item.types.includes("text/html"))
+            //       continue;
+            //   let reader = new FileReader;
+            //   reader.addEventListener("load", loadEvent => {
+            //       debugger;
+            //       //document.getElementById("html-output").innerHTML = reader.result;
+            //   });
+            //   reader.readAsText(await item.getType("text/html"));
+            //   break;
+            // }
+        })
+        this.el.focus()
+    }
+}
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-let liveSocket = new LiveSocket("/live", Socket, {params: {_csrf_token: csrfToken}})
+let liveSocket = new LiveSocket("/live", Socket, {params: {_csrf_token: csrfToken}, hooks: hooks})
 
 // Show progress bar on live navigation and form submits
 window.addEventListener("phx:page-loading-start", info => NProgress.start())
