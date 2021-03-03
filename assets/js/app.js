@@ -24,6 +24,11 @@ hooks.messenger = {
         window.socketMessenger = {
             sendClipboardData: (data) => {
                 this.pushEvent("paste", {pasteData: data}, (reply, ref) => { })
+            },
+            pasteClipboard: (mimeType, data) => {
+                this.pushEvent("paste", {mimeType: mimeType, data: data}, (reply, ref) => {
+                    console.log("in callback reply/ref");
+                })
             }
         }
     }

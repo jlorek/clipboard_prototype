@@ -26,6 +26,16 @@ defmodule ClipboardWeb.Room.ShowLive do
     </ul>
 
     <h3>Paste data</h3>
+    <div>Content: <%= @mime_type %></div>
+    <%= cond do %>
+    <% String.starts_with?(@mime_type, "text/") -> %>
+      <pre style="white-space: pre-wrap;"><%= @data %></pre>
+    <% String.starts_with?(@mime_type, "image/") -> %>
+      <img src="<%= @data %>"></img>
+    <% true -> %>
+      <div>Unprocessable</div>
+    <% end %>
+
     <%= form_for :input, "#", [phx_change: "validate", phx_submit: "save"],fn f -> %>
     <%= text_input f, :title, placeholder: "Title" %>
     <%= error_tag f, :title %>
@@ -34,16 +44,89 @@ defmodule ClipboardWeb.Room.ShowLive do
 
     <button id="read-html">Paste HTML below</button>
     <div id="html-output"></div>
-    <script>
-    document.getElementById("read-html").addEventListener("click", onPaste);
-    document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
 
+
+    <script>
+    window.addEventListener("paste", async (event) => {
+      event.preventDefault();
+
+      if(event.clipboardData == false){
+        return
+      }
+
+      // chrome text order: plain, html
+      // safari text order: html, plain
+      // chrome file order: plain, file
+      // safari file order: file
+      var items = event.clipboardData.items
+
+      var arrayItems = [];
+      for (let item of items) {
+        arrayItems.push(item);
+      }
+      arrayItems.sort()
+
+      for (let item of items) {
+        console.log(item);
+        // must be saved for Chrome,
+        // otherwise item.type is empty
+        // after waiting for async result
+        const mimeType = item.type;
+        let data = undefined;
+
+        // text/plain, text/html, text/uri-list
+        if (item.kind === "string") {
+          data = await readText(item);
+        }
+
+        // image/png
+        if (item.kind === "file") {
+          data = await readFile(item);
+        }
+
+        if (data) {
+          window.socketMessenger.pasteClipboard(mimeType, data);
+          return;
+        }
+      }
+    }, false);
+
+    async function readText(dataTransferItem) {
+      var text = await toString(dataTransferItem);
+      console.log("Got text from paste", text);
+      return text;
+    }
+
+    async function readFile(dataTransferItem) {
+      const file = dataTransferItem.getAsFile();
+      // file.name/size/type
+      console.log("Got file from paste", file);
+      var base64 = await toBase64(file);
+      console.log("File content", base64);
+      return base64;
+    }
+
+    const toBase64 = file => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+    });
+
+    const toString = dataTransferItem => new Promise((resolve, reject) => {
+      dataTransferItem.getAsString((result) => {
+        resolve(result);
+      });
+    });
+
+    //document.getElementById("read-html").addEventListener("click", onPaste);
+    //document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
     async function onPaste(pasteEvent) {
       // simple paste data extraction
       // let paste = (pasteEvent.clipboardData || window.clipboardData).getData('text');
       // console.log("Got something from a paste event: " + paste)
 
-      const acceptedTypes = ["text/html", "text/plain"]
+      const acceptedTypes = ["text/plain", "text/html"]
       const items = await navigator.clipboard.read();
       for (let item of items) {
         for (let acceptedType of acceptedTypes) {
@@ -91,6 +174,8 @@ defmodule ClipboardWeb.Room.ShowLive do
          |> assign(:room, room)
          |> assign(:user, user)
          |> assign(:slug, slug)
+         |> assign(:mime_type, "text/plain")
+         |> assign(:data, "nothing yet...")
          |> assign(:connected_users, [])}
     end
   end
@@ -107,16 +192,40 @@ defmodule ClipboardWeb.Room.ShowLive do
   end
 
   @impl true
+  def handle_event("paste", _params = %{"pasteData" => data}, socket) do
+    data |> IO.inspect(label: "Received paste data")
+    Phoenix.PubSub.broadcast(Clipboard.PubSub, "room:" <> socket.assigns.slug, %{paste_data: data})
+    {:noreply, socket}
+  end
+
+  def handle_event("paste", _params = %{"mimeType" => mime_type, "data" => data}, socket) do
+    data |> IO.inspect(label: "Received paste data")
+    Phoenix.PubSub.broadcast(
+      Clipboard.PubSub,
+      "room:" <> socket.assigns.slug,
+      %{mime_type: mime_type, data: data})
+    {:noreply, socket}
+  end
+
+  def handle_info(params = %{paste_data: data}, socket) do
+    IO.inspect(params, label: "Received paste broadcast")
+    socket = assign(socket, :data, data)
+    {:noreply, socket}
+  end
+
+  def handle_info(params = %{mime_type: mime_type, data: data}, socket) do
+    IO.inspect(params, label: "Received paste broadcast")
+    socket = socket
+      |> assign(:mime_type, mime_type)
+      |> assign(:data, data)
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(%Broadcast{event: "presence_diff"}, socket) do
     {:noreply,
      socket
      |> assign(:connected_users, list_present(socket))}
-  end
-
-  @impl true
-  def handle_event("paste", _params = %{"pasteData" => data}, socket) do
-    data |> IO.inspect(label: "Received Data")
-    {:noreply, socket}
   end
 
   defp list_present(socket) do
