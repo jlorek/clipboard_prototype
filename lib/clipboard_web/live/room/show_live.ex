@@ -26,14 +26,16 @@ defmodule ClipboardWeb.Room.ShowLive do
     </ul>
 
     <h3>Paste data</h3>
-    <div>Content: <%= @mime_type %></div>
+    <div>Content: <%= @mimetype %></div>
     <%= cond do %>
-    <% String.starts_with?(@mime_type, "text/") -> %>
+    <% String.starts_with?(@mimetype, "text/") -> %>
       <pre style="white-space: pre-wrap;"><%= @data %></pre>
-    <% String.starts_with?(@mime_type, "image/") -> %>
+    <% String.starts_with?(@mimetype, "image/") -> %>
       <img src="<%= @data %>"></img>
+    <% @filename != "" -> %>
+      <a download="<%= @filename %>" href="<%= @data %>">Download File</a>
     <% true -> %>
-      <div>Unprocessable</div>
+      <div>Unprocessable Content</div>
     <% end %>
 
     <%= form_for :input, "#", [phx_change: "validate", phx_submit: "save"],fn f -> %>
@@ -47,24 +49,28 @@ defmodule ClipboardWeb.Room.ShowLive do
 
 
     <script>
-    window.addEventListener("paste", async (event) => {
+    //document.getElementById("read-html").addEventListener("click", onPaste);
+    //document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
+    window.addEventListener("paste", onPasteV2, false);
+    document.getElementById("read-html").addEventListener("click", onPasteV2);
+
+
+    async function onPasteV2 (event) {
+      // required?
       event.preventDefault();
 
-      if(event.clipboardData == false){
-        return
+      const clipboardData = (event.clipboardData || window.clipboardData)
+      if(!clipboardData){
+        console.error("No Clipboard data attached to event.");
+        return;
       }
 
-      // chrome text order: plain, html
-      // safari text order: html, plain
-      // chrome file order: plain, file
-      // safari file order: file
-      var items = event.clipboardData.items
-
-      var arrayItems = [];
-      for (let item of items) {
-        arrayItems.push(item);
+      // var items = event.clipboardData.items;
+      var items = [];
+      for (let item of event.clipboardData.items) {
+        items.push(item);
       }
-      arrayItems.sort()
+      items.sort(compareDataTransferItems);
 
       for (let item of items) {
         console.log(item);
@@ -72,24 +78,52 @@ defmodule ClipboardWeb.Room.ShowLive do
         // otherwise item.type is empty
         // after waiting for async result
         const mimeType = item.type;
-        let data = undefined;
+        // let data = undefined;
 
-        // text/plain, text/html, text/uri-list
+        // eg. text/plain, text/html, text/uri-list
         if (item.kind === "string") {
-          data = await readText(item);
+          text = await readText(item);
+          if (text) {
+            window.socketMessenger.sendText(mimeType, text);
+            return;
+          }
         }
 
-        // image/png
+        // eg. image/png, application/octet
         if (item.kind === "file") {
-          data = await readFile(item);
+          file = await readFile(item);
+          if (file) {
+            window.socketMessenger.sendFile(mimeType, file.name, file.base64)
+            return;
+          }
         }
 
-        if (data) {
-          window.socketMessenger.pasteClipboard(mimeType, data);
-          return;
+        // if (data) {
+        //   window.socketMessenger.pasteClipboard(mimeType, data);
+        //   return;
+        // }
+      }
+      console.log("No suitable paste data found.")
+    }
+
+    // chrome text order: plain, html
+    // safari text order: html, plain
+    // chrome file order: plain, file
+    // safari file order: file
+    // desired order: file -> text/plain -> everything else
+    function compareDataTransferItems(a, b) {
+      if (a.kind === "file") {
+        if (b.kind !== "file") {
+          return -1;
         }
       }
-    }, false);
+      if (a.type === "text/plain") {
+        if (b.type !== "text/plain") {
+          return -1;
+        }
+      }
+      return 0;
+    }
 
     async function readText(dataTransferItem) {
       var text = await toString(dataTransferItem);
@@ -99,11 +133,19 @@ defmodule ClipboardWeb.Room.ShowLive do
 
     async function readFile(dataTransferItem) {
       const file = dataTransferItem.getAsFile();
-      // file.name/size/type
       console.log("Got file from paste", file);
+      // file.name/size/type
+      if (file.size > 5_000_000) {
+        console.error("File size exceeds limits.");
+        return undefined;
+      }
+      if (file.size === 0) {
+        console.log("File size is undefined, maybe an unsynced cloud drive file.");
+        return undefined;
+      }
       var base64 = await toBase64(file);
       console.log("File content", base64);
-      return base64;
+      return { name: file.name, base64: base64 };
     }
 
     const toBase64 = file => new Promise((resolve, reject) => {
@@ -119,8 +161,6 @@ defmodule ClipboardWeb.Room.ShowLive do
       });
     });
 
-    //document.getElementById("read-html").addEventListener("click", onPaste);
-    //document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
     async function onPaste(pasteEvent) {
       // simple paste data extraction
       // let paste = (pasteEvent.clipboardData || window.clipboardData).getData('text');
@@ -174,7 +214,8 @@ defmodule ClipboardWeb.Room.ShowLive do
          |> assign(:room, room)
          |> assign(:user, user)
          |> assign(:slug, slug)
-         |> assign(:mime_type, "text/plain")
+         |> assign(:mimetype, "text/plain")
+         |> assign(:filename, "")
          |> assign(:data, "nothing yet...")
          |> assign(:connected_users, [])}
     end
@@ -204,6 +245,33 @@ defmodule ClipboardWeb.Room.ShowLive do
       Clipboard.PubSub,
       "room:" <> socket.assigns.slug,
       %{mime_type: mime_type, data: data})
+    {:noreply, socket}
+  end
+
+  def handle_event("pasteText", params = %{"mimeType" => mimetype, "text" => data}, socket) do
+    params |> IO.inspect(label: "pasteText")
+    Phoenix.PubSub.broadcast(
+      Clipboard.PubSub,
+      "room:" <> socket.assigns.slug,
+      %{mimetype: mimetype, filename: "", data: data})
+    {:noreply, socket}
+  end
+
+  def handle_event("pasteFile", params = %{"mimeType" => mimetype, "filename" => filename, "base64" => data}, socket) do
+    params |> IO.inspect(label: "pasteFile")
+    Phoenix.PubSub.broadcast(
+      Clipboard.PubSub,
+      "room:" <> socket.assigns.slug,
+      %{mimetype: mimetype, filename: filename, data: data})
+    {:noreply, socket}
+  end
+
+  def handle_info(params = %{mimetype: mimetype, filename: filename, data: data}, socket) do
+    IO.inspect(params, label: "Received paste broadcast")
+    socket = socket
+      |> assign(:mimetype, mimetype)
+      |> assign(:filename, filename)
+      |> assign(:data, data)
     {:noreply, socket}
   end
 

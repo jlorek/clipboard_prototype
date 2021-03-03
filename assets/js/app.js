@@ -25,11 +25,21 @@ hooks.messenger = {
             sendClipboardData: (data) => {
                 this.pushEvent("paste", {pasteData: data}, (reply, ref) => { })
             },
-            pasteClipboard: (mimeType, data) => {
-                this.pushEvent("paste", {mimeType: mimeType, data: data}, (reply, ref) => {
+            pasteClipboard: (mimeType, data, name) => {
+                this.pushEvent("paste", {mimeType: mimeType, data: data, name: name}, (reply, ref) => {
                     console.log("in callback reply/ref");
                 })
-            }
+            },
+            sendText: (mimeType, text) => {
+                this.pushEvent("pasteText", {mimeType: mimeType, text: text}, (reply, ref) => {
+                    console.log("in callback reply/ref");
+                })
+            },
+            sendFile: (mimeType, filename, base64) => {
+                this.pushEvent("pasteFile", {mimeType: mimeType, filename: filename, base64: base64}, (reply, ref) => {
+                    console.log("in callback reply/ref");
+                })
+            },
         }
     }
 }
