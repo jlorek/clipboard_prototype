@@ -38,13 +38,15 @@ defmodule ClipboardWeb.Room.ShowLive do
       <div>Unprocessable Content</div>
     <% end %>
 
+    <!--
     <%= form_for :input, "#", [phx_change: "validate", phx_submit: "save"],fn f -> %>
     <%= text_input f, :title, placeholder: "Title" %>
     <%= error_tag f, :title %>
     <%= submit "Save" %>
     <% end %>
+    -->
 
-    <button id="read-html">Paste HTML below</button>
+    <button id="read-html">Click to paste (or CMD+V)</button>
     <div id="html-output"></div>
 
 
