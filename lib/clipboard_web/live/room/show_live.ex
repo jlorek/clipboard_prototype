@@ -52,15 +52,18 @@ defmodule ClipboardWeb.Room.ShowLive do
     //document.getElementById("read-html").addEventListener("click", onPaste);
     //document.getElementsByTagName("body")[0].addEventListener("paste", onPaste)
     window.addEventListener("paste", onPasteV2, false);
-    document.getElementById("read-html").addEventListener("click", onPasteV2);
+    //document.getElementById("read-html").addEventListener("click", onPasteV2);
+    document.getElementById("read-html").addEventListener("click", (e) => {
+      document.execCommand("paste");
+    });
 
 
     async function onPasteV2 (event) {
       // required?
       event.preventDefault();
 
-      const clipboardData = (event.clipboardData || window.clipboardData)
-      if(!clipboardData){
+      // const clipboardData = (event.clipboardData || window.clipboardData)
+      if(!event.clipboardData){
         console.error("No Clipboard data attached to event.");
         return;
       }
