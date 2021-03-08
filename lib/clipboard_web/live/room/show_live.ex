@@ -26,8 +26,9 @@ defmodule ClipboardWeb.Room.ShowLive do
     </ul>
 
     <h3>Paste data</h3>
-    <div>Content: <%= @mimetype %></div>
     <%= cond do %>
+    <% @mimetype == "" -> %>
+      <div>Nothing here yet, just past something.</div>
     <% String.starts_with?(@mimetype, "text/") -> %>
       <pre style="white-space: pre-wrap;"><%= @data %></pre>
     <% String.starts_with?(@mimetype, "image/") -> %>
@@ -214,14 +215,31 @@ defmodule ClipboardWeb.Room.ShowLive do
         }
 
       room ->
+        socket =
+          :ets.lookup(:clipboard_cache, slug)
+          |> IO.inspect(label: "Cached clipboard data for " <> slug)
+          |> case do
+            [{^slug, %{mimetype: mimetype, filename: filename, data: data}}] ->
+              socket
+              |> assign(:mimetype, mimetype)
+              |> assign(:filename, filename)
+              |> assign(:data, data)
+
+            _ ->
+              socket
+              |> assign(:mimetype, "")
+              |> assign(:filename, "")
+              |> assign(:data, "")
+          end
+
         {:ok,
          socket
          |> assign(:room, room)
          |> assign(:user, user)
          |> assign(:slug, slug)
-         |> assign(:mimetype, "text/plain")
-         |> assign(:filename, "")
-         |> assign(:data, "nothing yet...")
+         #  |> assign(:mimetype, "text/plain")
+         #  |> assign(:filename, "")
+         #  |> assign(:data, "nothing yet...")
          |> assign(:connected_users, [])}
     end
   end
@@ -240,43 +258,71 @@ defmodule ClipboardWeb.Room.ShowLive do
   @impl true
   def handle_event("paste", _params = %{"pasteData" => data}, socket) do
     data |> IO.inspect(label: "Received paste data")
+
     Phoenix.PubSub.broadcast(Clipboard.PubSub, "room:" <> socket.assigns.slug, %{paste_data: data})
+
     {:noreply, socket}
   end
 
   def handle_event("paste", _params = %{"mimeType" => mime_type, "data" => data}, socket) do
     data |> IO.inspect(label: "Received paste data")
+
     Phoenix.PubSub.broadcast(
       Clipboard.PubSub,
       "room:" <> socket.assigns.slug,
-      %{mime_type: mime_type, data: data})
+      %{mime_type: mime_type, data: data}
+    )
+
     {:noreply, socket}
   end
 
   def handle_event("pasteText", params = %{"mimeType" => mimetype, "text" => data}, socket) do
-    params |> IO.inspect(label: "pasteText")
+    params |> IO.inspect(label: "Received client paste")
+
+    :ets.insert(
+      :clipboard_cache,
+      {socket.assigns.slug, %{mimetype: mimetype, data: data, filename: ""}}
+    )
+
     Phoenix.PubSub.broadcast(
       Clipboard.PubSub,
       "room:" <> socket.assigns.slug,
-      %{mimetype: mimetype, filename: "", data: data})
+      %{mimetype: mimetype, filename: "", data: data}
+    )
+
     {:noreply, socket}
   end
 
-  def handle_event("pasteFile", params = %{"mimeType" => mimetype, "filename" => filename, "base64" => data}, socket) do
-    params |> IO.inspect(label: "pasteFile")
+  def handle_event(
+        "pasteFile",
+        params = %{"mimeType" => mimetype, "filename" => filename, "base64" => data},
+        socket
+      ) do
+    params |> IO.inspect(label: "Received client paste")
+
+    :ets.insert(
+      :clipboard_cache,
+      {socket.assigns.slug, %{mimetype: mimetype, data: data, filename: filename}}
+    )
+
     Phoenix.PubSub.broadcast(
       Clipboard.PubSub,
       "room:" <> socket.assigns.slug,
-      %{mimetype: mimetype, filename: filename, data: data})
+      %{mimetype: mimetype, filename: filename, data: data}
+    )
+
     {:noreply, socket}
   end
 
   def handle_info(params = %{mimetype: mimetype, filename: filename, data: data}, socket) do
     IO.inspect(params, label: "Received paste broadcast")
-    socket = socket
+
+    socket =
+      socket
       |> assign(:mimetype, mimetype)
       |> assign(:filename, filename)
       |> assign(:data, data)
+
     {:noreply, socket}
   end
 
@@ -288,9 +334,12 @@ defmodule ClipboardWeb.Room.ShowLive do
 
   def handle_info(params = %{mime_type: mime_type, data: data}, socket) do
     IO.inspect(params, label: "Received paste broadcast")
-    socket = socket
+
+    socket =
+      socket
       |> assign(:mime_type, mime_type)
       |> assign(:data, data)
+
     {:noreply, socket}
   end
 
