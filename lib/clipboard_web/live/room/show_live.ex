@@ -18,10 +18,10 @@ defmodule ClipboardWeb.Room.ShowLive do
     ~L"""
     <div id="<%= UUID.uuid4() %>" phx-hook="messenger" />
     <h1><%= @room.title %></h1>
-    <h3>Connected users:</h3>
+    <h3>Connected users</h3>
     <ul>
-    <%= for uuid <- @connected_users do %>
-      <li><%= uuid %></li>
+    <%= for other <- @connected_users do %>
+      <li><%= other.name %><%= if other.uuid == @user.uuid do %> (it's you)<% end %></li>
     <% end %>
     </ul>
 
@@ -202,7 +202,10 @@ defmodule ClipboardWeb.Room.ShowLive do
     user = create_connected_user()
     # Clipboard.PubSub is defined in application.ex children
     Phoenix.PubSub.subscribe(Clipboard.PubSub, "room:" <> slug)
-    {:ok, _} = Presence.track(self(), "room:" <> slug, user.uuid, %{})
+    {:ok, _} = Presence.track(self(), "room:" <> slug, user.uuid, %{
+      name: user.name,
+      online_at: inspect(System.system_time(:second))
+    })
 
     case Organizer.get_room(slug) do
       nil ->
@@ -235,11 +238,8 @@ defmodule ClipboardWeb.Room.ShowLive do
         {:ok,
          socket
          |> assign(:room, room)
-         |> assign(:user, user)
          |> assign(:slug, slug)
-         #  |> assign(:mimetype, "text/plain")
-         #  |> assign(:filename, "")
-         #  |> assign(:data, "nothing yet...")
+         |> assign(:user, user)
          |> assign(:connected_users, [])}
     end
   end
@@ -352,7 +352,7 @@ defmodule ClipboardWeb.Room.ShowLive do
 
   defp list_present(socket) do
     Presence.list("room:" <> socket.assigns.slug)
-    # |> IO.inspect
+    |> IO.inspect
     # %{
     #   "0b20d480-5c21-4141-ac1e-9c74caf06784" => %{
     #     metas: [%{phx_ref: "FmeeAgHwYNDfjhIE"}]
@@ -362,12 +362,15 @@ defmodule ClipboardWeb.Room.ShowLive do
     #   }
     # }
     # Phoenix Presence provides nice metadata, but we don't need it.
-    |> Enum.map(fn {k, _} -> k end)
+    #|> Enum.map(fn {k, _} -> k end)
+    #|> Enum.map(fn {k, _} -> %{uuid: k, name: Clipboard.NameGenerator.generate()} end)
+    |> Enum.map(fn {key, details} -> List.first(details.metas) |> Map.put(:uuid, key) end)
   end
 
   defp create_connected_user do
     %ConnectedUser{
-      uuid: UUID.uuid4()
+      uuid: UUID.uuid4(),
+      name: Clipboard.NameGenerator.generate()
     }
   end
 end
