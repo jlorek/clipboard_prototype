@@ -17,7 +17,23 @@ import {Socket} from "phoenix"
 import NProgress from "nprogress"
 import {LiveSocket} from "phoenix_live_view"
 
+import {copyToClipboard} from "./clipboard"
+window.$ = {
+    copyToClipboard
+}
+
 let hooks = {}
+
+hooks.responseCopyToClipboard = {
+    mounted() {
+        console.log("copyToClipboard: mounted")
+        this.handleEvent("responseCopyToClipboard", ({text}) => {
+            debugger;
+            copyToClipboard(text);
+        })
+    }
+}
+
 hooks.messenger = {
     mounted() {
         console.log("messenger is mounted")
@@ -72,6 +88,12 @@ hooks.whatever = {
     }
 }
 
+hooks.copyToClipboard = {
+    mounted() {
+
+    }
+}
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {params: {_csrf_token: csrfToken}, hooks: hooks})
 
@@ -88,3 +110,5 @@ liveSocket.connect()
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
+// ?
+export { }

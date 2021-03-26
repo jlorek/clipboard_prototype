@@ -9,7 +9,15 @@ defmodule ClipboardWeb.Room.NewLive do
   # render/1 implements a LiveView callback with the given assigns (variables containing session data) and expects a ~L sigil (Live EEx). I prefer my LEEx templates inline, but you’re welcome to create a file lib/littlechat_web/live/room/new_live.html.leex and get rid of this function if you prefer to keep your templates separate.
   @impl true
   def render(assigns) do
+    # import { hello } from "/js/clipboard.js"
     ~L"""
+    <script type="module">
+    import { hello } from "/js/clipboard.js"
+    hello("world")
+    </script>
+    <script>
+    console.log("new_live.ex")
+    </script>
     <h1>Create a New Room</h1>
     <div>
       <%= form_for @changeset, "#", [phx_change: "validate", phx_submit: "save"], fn f -> %>

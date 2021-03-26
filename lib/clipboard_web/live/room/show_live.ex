@@ -31,6 +31,10 @@ defmodule ClipboardWeb.Room.ShowLive do
       <div>Nothing here yet, just past something.</div>
     <% String.starts_with?(@mimetype, "text/") -> %>
       <pre style="white-space: pre-wrap;"><%= @data %></pre>
+      <button onclick="toClipboardLocal()">To clipboard (local)</button>
+      <textarea style="" id="clipboardSource"><%= @data %></textarea>
+
+      <button id="<%= UUID.uuid4() %>" phx-click="requestCopyToClipboard" phx-hook="responseCopyToClipboard" />Request clipboard from server</button>
     <% String.starts_with?(@mimetype, "image/") -> %>
       <img src="<%= @data %>"></img>
     <% @filename != "" -> %>
@@ -193,6 +197,25 @@ defmodule ClipboardWeb.Room.ShowLive do
       console.log("Got paste data, but could not extract text.", items)
     }
 
+    function toClipboardLocal() {
+      if (window.clipboardData && window.clipboardData.setData) {
+          // Internet Explorer-specific code path to prevent textarea being shown while dialog is visible.
+          return window.clipboardData.setData("Text", text);
+      }
+      else if (document.queryCommandSupported && document.queryCommandSupported("copy")) {
+          var textarea = document.getElementById("clipboardSource")
+          //textarea.style.position = "fixed";  // Prevent scrolling to bottom of page in Microsoft Edge.
+          textarea.select();
+          try {
+              return document.execCommand("copy");  // Security exception may be thrown by some browsers.
+          }
+          catch (ex) {
+              console.warn("Copy to clipboard failed.", ex);
+              return false;
+          }
+      }
+  }
+
     </script>
     """
   end
@@ -242,6 +265,12 @@ defmodule ClipboardWeb.Room.ShowLive do
          |> assign(:user, user)
          |> assign(:connected_users, [])}
     end
+  end
+
+
+  def handle_event("requestCopyToClipboard", _params, socket) do
+    IO.puts("copyToClipboard!!!!!!!!" <> socket.assigns.data)
+    {:noreply, push_event(socket, "responseCopyToClipboard", %{text: socket.assigns.data})}
   end
 
   @impl true
